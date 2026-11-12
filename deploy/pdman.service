@@ -1,0 +1,23 @@
+[Unit]
+Description=pdman — Docker + Podman yönetim paneli
+Documentation=https://github.com/kullanici/pdman
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pdman
+Group=pdman
+ExecStart=/usr/local/bin/pdman --config /etc/pdman/pdman.toml
+Restart=on-failure
+RestartSec=5
+
+# Panelin docker/podman socket'lerine erişmesi gerekir; socket'e erişim izni
+# için kullanıcıyı docker grubuna ekleyin ya da socket'in izinlerini
+# yapılandırın.
+SupplementaryGroups=docker
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}pdman — {{ inspect.name }}{% endblock %}
+{% block content %}
+<div class="space-y-6">
+    <div class="flex flex-wrap items-center gap-3">
+        <a href="/?host={{ host_id }}" class="flex items-center gap-1.5 text-sm text-gray-500 transition-colors hover:text-gray-300">
+            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18"/>
+            </svg>
+            Container'lar
+        </a>
+        <span class="text-gray-700">/</span>
+        <h2 class="text-xl font-bold">{{ inspect.name }}</h2>
+        <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium
+            {% if inspect.state == "running" %}bg-green-500/10 text-green-300
+            {%- else if inspect.state == "paused" %}bg-yellow-500/10 text-yellow-300
+            {%- else %}bg-gray-800 text-gray-400{% endif %}">
+            <span class="h-1.5 w-1.5 rounded-full bg-current"></span>
+            {{ inspect.state }}
+        </span>
+    </div>
+
+    {% if inspect.state == "running" %}
+    <div id="stats"
+         hx-get="/partials/container-stats?host={{ host_id }}&id={{ id }}"
+         hx-trigger="load, every 2s"
+         hx-swap="outerHTML"></div>
+    {% endif %}
+
+    <section class="overflow-hidden rounded-xl border border-gray-800 bg-gray-900/60">
+        <div class="border-b border-gray-800 px-4 py-3">
+            <h3 class="text-sm font-semibold text-gray-300">Bilgiler</h3>
+        </div>
+        <table class="w-full text-left text-sm">
+            <tbody>
+            <tr class="border-b border-gray-800/60">
+                <td class="w-44 bg-gray-900/40 px-4 py-2.5 text-gray-500">ID</td>
+                <td class="px-4 py-2.5 font-mono text-xs text-gray-300">{{ inspect.id }}</td>
+            </tr>
+            <tr class="border-b border-gray-800/60">
+                <td class="bg-gray-900/40 px-4 py-2.5 text-gray-500">Image</td>
+                <td class="px-4 py-2.5 font-mono text-xs text-gray-300">{{ inspect.image }}</td>
+            </tr>
+            {% match inspect.command %}
+            {% when Some with (command) %}
+            <tr class="border-b border-gray-800/60">
+                <td class="bg-gray-900/40 px-4 py-2.5 text-gray-500">Komut</td>
+                <td class="px-4 py-2.5 font-mono text-xs text-gray-300">{{ command }}</td>
+            </tr>
+            {% when None %}
+            {% endmatch %}
+            <tr class="border-b border-gray-800/60">
+                <td class="bg-gray-900/40 px-4 py-2.5 text-gray-500">Oluşturuldu</td>
+                <td class="px-4 py-2.5 text-gray-300">{{ inspect.created }}</td>
+            </tr>
+            {% if !inspect.ports.is_empty() %}
+            <tr class="border-b border-gray-800/60">
+                <td class="bg-gray-900/40 px-4 py-2.5 text-gray-500">Portlar</td>
+                <td class="px-4 py-2.5 font-mono text-xs text-gray-300">{{ inspect.ports.join(", ") }}</td>
+            </tr>
+            {% endif %}
+            {% if !inspect.mounts.is_empty() %}
+            <tr class="border-b border-gray-800/60">
+                <td class="bg-gray-900/40 px-4 py-2.5 text-gray-500">Bağlamalar</td>
+                <td class="px-4 py-2.5 font-mono text-xs text-gray-300">{{ inspect.mounts.join(", ") }}</td>
+            </tr>
+            {% endif %}
+            </tbody>
+        </table>
+    </section>
+
+    <section class="overflow-hidden rounded-xl border border-gray-800 bg-gray-900/60">
+        <div class="flex items-center gap-2 border-b border-gray-800 px-4 py-3">
+            <h3 class="text-sm font-semibold text-gray-300">Loglar</h3>
+            <span class="flex items-center gap-1.5 text-xs text-gray-500">
+                <span class="relative flex h-2 w-2">
+                    <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-60"></span>
+                    <span class="relative inline-flex h-2 w-2 rounded-full bg-green-400"></span>
+                </span>
+                canlı akış
+            </span>
+        </div>
+        <div hx-ext="sse" sse-connect="/api/containers/{{ id }}/logs?host={{ host_id }}&tail=200">
+            <pre id="logs"
+                 class="h-96 overflow-auto bg-black/60 p-4 font-mono text-xs leading-relaxed text-gray-300"
+                 sse-swap="log-line"
+                 hx-swap="beforeend"></pre>
+        </div>
+    </section>
+</div>
+{% endblock %}

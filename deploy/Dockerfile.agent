@@ -1,0 +1,28 @@
+# pdman-agent — tek statik binary'li minimal imge.
+#
+# Derleme:
+#   docker build -f deploy/Dockerfile.agent -t pdman-agent .
+#
+# Çalıştırma (hostun docker socket'iyle):
+#   docker run -d --name pdman-agent \
+#     -v /var/run/docker.sock:/var/run/docker.sock \
+#     -v pdman-agent-config:/etc/pdman-agent \
+#     -p 7654:7654 pdman-agent
+#
+# Not: Podman socket'i de benzer biçimde bağlanabilir
+# (-v /run/podman/podman.sock:/run/podman/podman.sock).
+
+FROM rust:1 AS builder
+
+WORKDIR /src
+COPY Cargo.toml Cargo.lock ./
+COPY crates ./crates
+# Yalnızca agent derlenir; panel binary'si imgeye girmez.
+RUN cargo build --release -p pdman-agent
+
+FROM gcr.io/distroless/cc-debian12
+
+COPY --from=builder /src/target/release/pdman-agent /usr/local/bin/pdman-agent
+
+EXPOSE 7654
+ENTRYPOINT ["/usr/local/bin/pdman-agent", "--config", "/etc/pdman-agent/pdman-agent.toml"]

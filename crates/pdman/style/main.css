@@ -1,0 +1,27 @@
+@import "tailwindcss";
+@source "../templates";
+@source "../src";
+
+/* Koyu temada ince kaydırma çubukları */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: oklch(37.3% 0.034 259.733) transparent;
+}
+
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: oklch(37.3% 0.034 259.733);
+    border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: oklch(44.6% 0.03 257.281);
+}

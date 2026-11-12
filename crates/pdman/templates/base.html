@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="tr">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}pdman{% endblock %}</title>
+
+    <script src="https://unpkg.com/htmx.org@2.0.7"></script>
+    <script src="https://unpkg.com/htmx-ext-sse@2.2.4/dist/sse.min.js"></script>
+    <link rel="stylesheet" href="/static/main.css">
+</head>
+<body class="min-h-screen bg-gray-950 text-gray-100" hx-ext="sse" sse-connect="/api/events">
+<div class="flex min-h-screen">
+    <aside class="sticky top-0 flex h-screen w-64 shrink-0 flex-col border-r border-gray-800 bg-gray-900/40">
+        <div class="flex items-center gap-3 border-b border-gray-800 px-5 py-4">
+            <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-sky-500 to-violet-500 text-white shadow-lg shadow-sky-500/20">
+                <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9"/>
+                </svg>
+            </span>
+            <div class="min-w-0">
+                <h1 class="text-lg font-bold leading-tight">pdman</h1>
+                <p class="text-[11px] text-gray-500">container yönetim paneli</p>
+            </div>
+        </div>
+
+        {#— Hostlar: runtime'a göre tamamen ayrık gruplar —#}
+        <div class="flex-1 space-y-6 overflow-y-auto px-3 py-4">
+            <section>
+                <div class="mb-2 flex items-center gap-2 px-2">
+                    <svg class="h-4 w-4 text-sky-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M4 9.5h3.2v3.2H4zM7.7 9.5h3.2v3.2H7.7zM11.4 9.5h3.2v3.2h-3.2zM7.7 5.8h3.2V9H7.7zM4 13.2h3.2v3.2H4zM7.7 13.2h3.2v3.2H7.7zM11.4 13.2h3.2v3.2h-3.2z"/>
+                        <path d="M2.5 17.9c1.2 1.9 3.6 3.1 6.5 3.4 4 .4 8-.6 10.3-2.6 1.5-1.3 2.2-3 2-4.7-.2-1.1-1-1.9-2.1-2.2"/>
+                    </svg>
+                    <span class="text-xs font-semibold uppercase tracking-wider text-sky-400">Docker</span>
+                </div>
+                <nav class="space-y-1">
+                    {% for host in layout.docker_hosts %}
+                    <a href="{{ layout.path }}?host={{ host.id }}"
+                       class="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-gray-300 transition-colors hover:bg-gray-800/70 {% if host.id == layout.host_id %}bg-gray-800 font-medium text-white{% endif %}"
+                       title="{% if host.available %}çevrimiçi{% else %}kullanılamıyor{% endif %}">
+                        <span class="h-2 w-2 shrink-0 rounded-full {% if host.available %}bg-green-400{% else %}bg-red-500{% endif %}"></span>
+                        <span class="truncate">{{ host.label }}</span>
+                    </a>
+                    {% endfor %}
+                    {% if layout.docker_hosts.is_empty() %}
+                    <p class="px-3 py-1.5 text-xs text-gray-600">kayıtlı host yok</p>
+                    {% endif %}
+                </nav>
+            </section>
+
+            <section>
+                <div class="mb-2 flex items-center gap-2 px-2">
+                    <svg class="h-4 w-4 text-violet-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M12 2.5l8.2 4.75v9.5L12 21.5l-8.2-4.75v-9.5L12 2.5z"/>
+                        <circle cx="12" cy="12" r="3.2"/>
+                    </svg>
+                    <span class="text-xs font-semibold uppercase tracking-wider text-violet-400">Podman</span>
+                </div>
+                <nav class="space-y-1">
+                    {% for host in layout.podman_hosts %}
+                    <a href="{{ layout.path }}?host={{ host.id }}"
+                       class="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-gray-300 transition-colors hover:bg-gray-800/70 {% if host.id == layout.host_id %}bg-gray-800 font-medium text-white{% endif %}"
+                       title="{% if host.available %}çevrimiçi{% else %}kullanılamıyor{% endif %}">
+                        <span class="h-2 w-2 shrink-0 rounded-full {% if host.available %}bg-green-400{% else %}bg-red-500{% endif %}"></span>
+                        <span class="truncate">{{ host.label }}</span>
+                    </a>
+                    {% endfor %}
+                    {% if layout.podman_hosts.is_empty() %}
+                    <p class="px-3 py-1.5 text-xs text-gray-600">kayıtlı host yok</p>
+                    {% endif %}
+                </nav>
+            </section>
+        </div>
+
+        {#— Seçili hostun kaynakları (Pod'lar yalnızca Podman hostlarında) —#}
+        <div class="border-t border-gray-800 px-3 py-4">
+            <div class="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-gray-500">Kaynaklar</div>
+            <nav class="space-y-1">
+                <a href="/?host={{ layout.host_id }}"
+                   class="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-gray-400 transition-colors hover:bg-gray-800/70 hover:text-gray-200 {% if layout.active == "containers" %}{{ layout.nav_active_class }} font-medium{% endif %}">
+                    <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9"/>
+                    </svg>
+                    Container'lar
+                </a>
+                {% if layout.is_podman %}
+                <a href="/pods?host={{ layout.host_id }}"
+                   class="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-gray-400 transition-colors hover:bg-gray-800/70 hover:text-gray-200 {% if layout.active == "pods" %}{{ layout.nav_active_class }} font-medium{% endif %}">
+                    <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z"/>
+                    </svg>
+                    Pod'lar
+                </a>
+                {% endif %}
+                <a href="/images?host={{ layout.host_id }}"
+                   class="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-gray-400 transition-colors hover:bg-gray-800/70 hover:text-gray-200 {% if layout.active == "images" %}{{ layout.nav_active_class }} font-medium{% endif %}">
+                    <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z"/>
+                    </svg>
+                    Image'lar
+                </a>
+                <a href="/volumes?host={{ layout.host_id }}"
+                   class="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-gray-400 transition-colors hover:bg-gray-800/70 hover:text-gray-200 {% if layout.active == "volumes" %}{{ layout.nav_active_class }} font-medium{% endif %}">
+                    <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 5.625c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125"/>
+                    </svg>
+                    Volume'lar
+                </a>
+                <a href="/networks?host={{ layout.host_id }}"
+                   class="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-gray-400 transition-colors hover:bg-gray-800/70 hover:text-gray-200 {% if layout.active == "networks" %}{{ layout.nav_active_class }} font-medium{% endif %}">
+                    <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .778-.099 1.533-.284 2.253m-18.432 0A8.959 8.959 0 0 1 3 12c0-1.605.42-3.113 1.157-4.418"/>
+                    </svg>
+                    Network'ler
+                </a>
+            </nav>
+        </div>
+    </aside>
+
+    <main class="flex min-w-0 flex-1 flex-col">
+        <header class="sticky top-0 z-10 flex items-center gap-4 border-b border-gray-800 bg-gray-950/80 px-8 py-4 backdrop-blur">
+            <h2 class="text-xl font-bold">{{ layout.title }}</h2>
+            <span class="ml-auto flex items-center gap-2 rounded-full border border-gray-800 bg-gray-900 px-3 py-1.5 text-sm text-gray-300">
+                <span class="h-2 w-2 rounded-full {% if layout.host_available %}bg-green-400{% else %}bg-red-500{% endif %}"></span>
+                <span class="max-w-56 truncate">{{ layout.host_name }}</span>
+                <span class="rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider {{ layout.brand_badge_class }}">{{ layout.host_kind }}</span>
+            </span>
+        </header>
+        <div class="flex-1 p-8">
+            {% block content %}{% endblock %}
+        </div>
+    </main>
+</div>
+</body>
+</html>

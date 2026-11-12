@@ -1,0 +1,56 @@
+<div id="images"
+     hx-get="/partials/images?host={{ host_id }}"
+     hx-trigger="every 30s"
+     hx-swap="outerHTML">
+    {% match error %}
+    {% when Some with (message) %}
+    <div class="flex items-start gap-3 rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300">
+        <svg class="mt-0.5 h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"/>
+        </svg>
+        <span>{{ message }}</span>
+    </div>
+    {% when None %}
+    <div class="overflow-hidden rounded-xl border border-gray-800 bg-gray-900/60">
+        <div class="flex items-center justify-between border-b border-gray-800 px-4 py-3">
+            <h3 class="text-sm font-semibold text-gray-300">Image'lar</h3>
+            <span class="rounded-full bg-gray-800 px-2.5 py-0.5 text-xs tabular-nums text-gray-400">{{ images.len() }}</span>
+        </div>
+        {% if images.is_empty() %}
+        <div class="p-10 text-center text-sm text-gray-500">Bu hostta image yok.</div>
+        {% else %}
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+                <thead class="text-xs uppercase tracking-wider text-gray-500">
+                <tr class="border-b border-gray-800">
+                    <th class="px-4 py-3 font-medium">Repolar</th>
+                    <th class="px-4 py-3 font-medium">ID</th>
+                    <th class="px-4 py-3 font-medium">Boyut</th>
+                    <th class="px-4 py-3 font-medium">Oluşturuldu</th>
+                    <th class="px-4 py-3 text-right font-medium">İşlemler</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for image in images %}
+                <tr class="border-b border-gray-800/60 transition-colors last:border-0 hover:bg-gray-800/40">
+                    <td class="px-4 py-3">
+                        <span class="block max-w-[20rem] truncate font-medium" title="{{ image.tags }}">{{ image.tags }}</span>
+                    </td>
+                    <td class="px-4 py-3 font-mono text-xs text-gray-400">{{ image.id }}</td>
+                    <td class="px-4 py-3 tabular-nums text-gray-400">{{ image.size }}</td>
+                    <td class="px-4 py-3 text-gray-400">{{ image.created }}</td>
+                    <td class="px-4 py-3 text-right">
+                        <button hx-post="/images/{{ image.id }}/remove?host={{ host_id }}"
+                                hx-target="#images" hx-swap="outerHTML" hx-disabled-elt="this"
+                                hx-confirm="Image silinsin mi? (Bağlı container'lar varsa silinemez.)"
+                                class="rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1.5 text-xs font-medium text-red-300 transition-colors hover:bg-red-500/20">Sil</button>
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+    </div>
+    {% endmatch %}
+</div>

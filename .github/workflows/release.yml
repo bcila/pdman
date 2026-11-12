@@ -1,0 +1,95 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Test
+        run: cargo test --workspace
+
+      - name: Agent bağımlılık guard'ı
+        run: sh scripts/check-agent-deps.sh
+
+  build:
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            runner: ubuntu-latest
+          - target: aarch64-unknown-linux-musl
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: musl araçları
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Derle
+        run: |
+          cargo build --release --target ${{ matrix.target }} -p pdman
+          cargo build --release --target ${{ matrix.target }} -p pdman-agent
+
+      - name: Paketle
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          TARGET=${{ matrix.target }}
+
+          strip target/$TARGET/release/pdman
+          strip target/$TARGET/release/pdman-agent
+
+          # pdman (panel)
+          mkdir -p dist/pdman
+          cp target/$TARGET/release/pdman dist/pdman/
+          cp README.md PLAN.md LICENSE* dist/pdman/ 2>/dev/null || true
+          cp examples/pdman.toml dist/pdman/
+          tar -czf "pdman-$TARGET.tar.gz" -C dist pdman
+
+          # pdman-agent
+          mkdir -p dist/pdman-agent
+          cp target/$TARGET/release/pdman-agent dist/pdman-agent/
+          cp README.md LICENSE* dist/pdman-agent/ 2>/dev/null || true
+          cp examples/pdman-agent.toml deploy/pdman-agent.service deploy/install-agent.sh dist/pdman-agent/
+          tar -czf "pdman-agent-$TARGET.tar.gz" -C dist pdman-agent
+
+      - name: Sürüm notları (kısa özet)
+        run: |
+          {
+            echo "## pdman ${GITHUB_REF_NAME}"
+            echo ""
+            echo "- \`pdman-<hedef>.tar.gz\` — panel (tek statik binary + örnek yapılandırma)"
+            echo "- \`pdman-agent-<hedef>.tar.gz\` — agent (binary + systemd servisi + kurulum betiği)"
+            echo ""
+            echo "Hedefler: \`x86_64-unknown-linux-musl\`, \`aarch64-unknown-linux-musl\` (tam statik)."
+            echo ""
+            echo "Kurulum: agent için \`install-agent.sh\`; panel için \`pdman --config pdman.toml\`."
+          } > notes.md
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          body_path: notes.md
+          files: |
+            pdman-*-unknown-linux-musl.tar.gz
+            pdman-agent-*-unknown-linux-musl.tar.gz

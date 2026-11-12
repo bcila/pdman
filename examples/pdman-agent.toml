@@ -1,0 +1,31 @@
+# pdman-agent için örnek yapılandırma.
+#
+# Kopyalayıp düzenleyin:
+#   sudo cp examples/pdman-agent.toml /etc/pdman-agent/pdman-agent.toml
+
+name = "bu-sunucu"
+
+[server]
+# Dinleme adresi. Token olmadan yalnızca geri-döngü adreslerine bind edilir;
+# dışarıya açmak için token zorunludur.
+bind = "0.0.0.0:7654"
+
+[auth]
+# Taşıyıcı token; panelde [[hosts]] altında aynı değeri verin.
+# Ya da dosyadan okumak için: token_file = "/etc/pdman-agent/token"
+token = "uzun-ve-rastgele-bir-token"
+
+[docker]
+socket = "/var/run/docker.sock"
+
+[podman]
+socket = "/run/podman/podman.sock"
+
+# Opsiyonel TLS. ca_file verilirse mTLS olur: yalnızca bu CA ile imzalanan
+# istemci sertifikasına sahip bağlantılar kabul edilir (panelde [[hosts]]
+# cert_file/key_file). TLS olmadan güvenli ağ/SSH tüneli kullanın.
+#
+# [tls]
+# cert_file = "/etc/pdman-agent/cert.pem"
+# key_file = "/etc/pdman-agent/key.pem"
+# ca_file = "/etc/pdman-agent/ca.pem"

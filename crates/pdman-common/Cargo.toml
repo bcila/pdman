@@ -1,0 +1,45 @@
+[package]
+name = "pdman-common"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+default = ["runtime"]
+# Docker/Podman runtime istemcileri (bollard vb.). Yalnızca tipleri gereken
+# taraftar `default-features = false` ile hafif bir bağımlılık ağacı çeker.
+runtime = [
+    "dep:bollard",
+    "dep:async-trait",
+    "dep:futures-core",
+    "dep:futures-util",
+    "dep:dirs",
+    "dep:tokio",
+    "dep:hyper",
+    "dep:hyper-util",
+    "dep:hyperlocal",
+    "dep:http",
+    "dep:http-body-util",
+    "dep:bytes",
+]
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+bollard = { workspace = true, optional = true }
+async-trait = { workspace = true, optional = true }
+futures-core = { workspace = true, optional = true }
+futures-util = { workspace = true, optional = true }
+dirs = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
+hyper = { workspace = true, optional = true }
+hyper-util = { workspace = true, optional = true }
+hyperlocal = { workspace = true, optional = true }
+http = { workspace = true, optional = true }
+http-body-util = { workspace = true, optional = true }
+bytes = { workspace = true, optional = true }
+
+[lints]
+workspace = true

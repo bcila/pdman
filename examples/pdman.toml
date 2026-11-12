@@ -1,0 +1,32 @@
+# pdman paneli için örnek yapılandırma.
+#
+# Kopyalayıp düzenleyin: cp examples/pdman.toml pdman.toml
+
+[server]
+# Panelin dinleme adresi. Uzaktan erişim için ters vekil (nginx vb.) ya da
+# SSH tüneli kullanın; panelin kendisinde kimlik doğrulama yoktur.
+bind = "127.0.0.1:3000"
+
+[local]
+# Panelin çalıştığı makinedeki runtime'lar panelde görünsün mü?
+enabled = true
+# Socket yollarını varsayılanların yerine kullanmak için:
+# docker_socket = "/var/run/docker.sock"
+# podman_socket = "/run/podman/podman.sock"
+
+# Uzak sunucular (pdman-agent). Her agent, sağlık yanıtındaki her kullanılabilir
+# runtime için ayrı host olarak kaydedilir (örn. "prod1-docker").
+#
+# [[hosts]]
+# name = "prod1"
+# url = "https://10.0.0.5:7654"
+# token_file = "/etc/pdman/prod1.token"
+#
+# mTLS gerektiren agent için (agent tarafında [tls] ca_file):
+# [[hosts]]
+# name = "prod2"
+# url = "https://10.0.0.6:7654"
+# token = "gizli"
+# ca_file = "/etc/pdman/prod2-ca.pem"       # agent'ın sertifikasını imzalayan CA
+# cert_file = "/etc/pdman/panel-client.pem" # panelin istemci sertifikası
+# key_file = "/etc/pdman/panel-client.key"

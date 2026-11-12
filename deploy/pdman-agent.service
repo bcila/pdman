@@ -1,0 +1,23 @@
+[Unit]
+Description=pdman agent — Docker/Podman yönetim agentı
+Documentation=https://github.com/kullanici/pdman
+After=network-online.target docker.socket podman.socket
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/local/bin/pdman-agent --config /etc/pdman-agent/pdman-agent.toml
+Restart=on-failure
+RestartSec=5
+
+# Basit sağlamlaştırma.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/
+ReadWritePaths=/run/podman /var/run/docker.sock
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
