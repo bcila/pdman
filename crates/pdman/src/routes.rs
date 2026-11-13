@@ -4,7 +4,7 @@ use std::{convert::Infallible, sync::Arc};
 
 use askama::Template;
 use axum::{
-    Json,
+    Form, Json,
     extract::{Path, Query, State},
     http::StatusCode,
     response::{
@@ -21,7 +21,12 @@ use pdman_common::{
     runtime::{ContainerAction, LogOpts, PodAction},
 };
 
-use crate::{App, AppState, hosts::HostEntry};
+use crate::{
+    App, AppState,
+    agent::{AgentClient, AgentTls},
+    db::ServerRecord,
+    hosts::{AgentConnection, HostEntry, HostSource, build_agent_hosts},
+};
 
 /// `?host=` sorgu parametresi.
 #[derive(Debug, Deserialize)]
@@ -743,6 +748,460 @@ pub async fn network_remove(
     })
 }
 
+// ———— Sunucu yönetimi (Faz 6) ————
+
+/// `POST /servers/add` form alanları.
+#[derive(Debug, Deserialize)]
+pub struct ServerForm {
+    name: String,
+    url: String,
+    token: Option<String>,
+    ca_file: Option<String>,
+    cert_file: Option<String>,
+    key_file: Option<String>,
+}
+
+/// Sunucu tablosundaki tek satır (bir agent'ın tüm runtime kayıtları
+/// birleştirilerek oluşturulur).
+struct ServerCard {
+    id: String,
+    name: String,
+    url: String,
+    /// `config` ya da `database`.
+    source: &'static str,
+    /// Kullanılabilir runtime'lar ("docker, podman").
+    kinds: String,
+    tls: bool,
+    mtls: bool,
+    token: bool,
+    available: bool,
+    error: Option<String>,
+    /// Arayüzden silinebilir mi (yalnız veritabanı kaynaklı)?
+    removable: bool,
+}
+
+/// Yerel runtime satırı.
+struct LocalCard {
+    name: String,
+    available: bool,
+}
+
+/// Eylem sonrası görünen kısa ileti.
+struct Flash {
+    success: bool,
+    message: String,
+}
+
+impl Flash {
+    fn success(message: impl Into<String>) -> Self {
+        Self {
+            success: true,
+            message: message.into(),
+        }
+    }
+
+    fn error(message: impl Into<String>) -> Self {
+        Self {
+            success: false,
+            message: message.into(),
+        }
+    }
+}
+
+#[derive(Template)]
+#[template(path = "servers.html")]
+struct ServersPage {
+    layout: Layout,
+    db_ready: bool,
+    servers: Vec<ServerCard>,
+    local_hosts: Vec<LocalCard>,
+    flash: Option<Flash>,
+}
+
+#[derive(Template)]
+#[template(path = "partials/servers.html")]
+struct ServersPartial {
+    db_ready: bool,
+    servers: Vec<ServerCard>,
+    local_hosts: Vec<LocalCard>,
+    flash: Option<Flash>,
+}
+
+/// `GET /servers` — sunucu yönetim sayfası.
+pub async fn servers_page(State(state): State<App>) -> Response {
+    let host = state.registry.default_host();
+
+    render(ServersPage {
+        layout: layout(&state, host.as_deref(), "/", "servers", "Sunucular"),
+        db_ready: state.db.is_some(),
+        servers: server_cards(&state),
+        local_hosts: local_cards(&state),
+        flash: None,
+    })
+}
+
+/// `GET /partials/servers` — sunucu tablosu partial'ı.
+pub async fn servers_partial(State(state): State<App>) -> Response {
+    render_servers_partial(&state, None)
+}
+
+/// `POST /servers/add` — yeni sunucu ekler.
+///
+/// Formu doğrular, agent'a sağlık denetimi yapar; yalnızca ulaşılabilen
+/// sunucular kaydedilir. Kayıt PostgreSQL'e yazılır ve hostlar kayıt
+/// defterine girer (olay ileticileri dahil).
+pub async fn servers_add(State(state): State<App>, Form(form): Form<ServerForm>) -> Response {
+    let Some(db) = state.db.as_ref() else {
+        return render_servers_partial(
+            &state,
+            Some(Flash::error(
+                "veritabanı yapılandırılmamış (pdman.toml: [database] url)",
+            )),
+        );
+    };
+
+    let name = form.name.trim().to_owned();
+    let url = form.url.trim().to_owned();
+    let token = form.token.as_deref().unwrap_or("").trim().to_owned();
+
+    if let Err(message) = validate_server_form(&name, &url, &token) {
+        return render_servers_partial(&state, Some(Flash::error(message)));
+    }
+
+    let id = slugify(&name);
+    if state
+        .registry
+        .hosts()
+        .iter()
+        .any(|host| host.server_id == id)
+    {
+        return render_servers_partial(
+            &state,
+            Some(Flash::error(format!(
+                "{name} adında bir sunucu zaten kayıtlı"
+            ))),
+        );
+    }
+
+    let tls = AgentTls {
+        ca_file: trimmed(&form.ca_file),
+        cert_file: trimmed(&form.cert_file),
+        key_file: trimmed(&form.key_file),
+    };
+
+    // Bağlantı güvenliği: agent'a ulaşılırsa kaydet.
+    if let Err(err) = AgentClient::health(&url, &token, tls.clone()).await {
+        return render_servers_partial(
+            &state,
+            Some(Flash::error(format!("agent'e ulaşılamadı: {err}"))),
+        );
+    }
+
+    let connection = AgentConnection {
+        server_id: id.clone(),
+        name: name.clone(),
+        url: url.clone(),
+        token: token.clone(),
+        tls: tls.clone(),
+        source: HostSource::Database,
+    };
+
+    let entries = build_agent_hosts(&connection).await;
+
+    let record = ServerRecord {
+        id: id.clone(),
+        name: name.clone(),
+        url,
+        token,
+        ca_file: tls.ca_file.clone().unwrap_or_default(),
+        cert_file: tls.cert_file.clone().unwrap_or_default(),
+        key_file: tls.key_file.clone().unwrap_or_default(),
+    };
+    if let Err(err) = db.insert_server(&record).await {
+        return render_servers_partial(
+            &state,
+            Some(Flash::error(format!("sunucu kaydedilemedi: {err}"))),
+        );
+    }
+
+    let kinds = entries
+        .iter()
+        .map(|entry| entry.kind.as_str())
+        .collect::<Vec<_>>()
+        .join(", ");
+    state.registry.upsert_server(&id, entries);
+
+    render_servers_partial(
+        &state,
+        Some(Flash::success(format!("{name} eklendi ({kinds})"))),
+    )
+}
+
+/// `POST /servers/{id}/remove` — sunucuyu veritabanından ve kayıt
+/// defterinden kaldırır.
+pub async fn servers_remove(State(state): State<App>, Path(id): Path<String>) -> Response {
+    let Some(db) = state.db.as_ref() else {
+        return render_servers_partial(
+            &state,
+            Some(Flash::error(
+                "veritabanı yapılandırılmamış (pdman.toml: [database] url)",
+            )),
+        );
+    };
+
+    if state
+        .registry
+        .hosts()
+        .iter()
+        .any(|host| host.server_id == id && host.source != HostSource::Database)
+    {
+        return render_servers_partial(
+            &state,
+            Some(Flash::error(
+                "yalnızca arayüzden eklenen sunucular silinebilir (pdman.toml'dakiler dosyadan yönetilir)",
+            )),
+        );
+    }
+
+    if let Err(err) = db.delete_server(&id).await {
+        return render_servers_partial(
+            &state,
+            Some(Flash::error(format!("sunucu silinemedi: {err}"))),
+        );
+    }
+
+    state.registry.remove_server(&id);
+    render_servers_partial(&state, Some(Flash::success("sunucu silindi")))
+}
+
+/// `POST /servers/{id}/check` — sunucunun bağlantısını yeniden sınar ve
+/// durumunu tazeler.
+pub async fn servers_check(State(state): State<App>, Path(id): Path<String>) -> Response {
+    let Some(db) = state.db.as_ref() else {
+        return render_servers_partial(
+            &state,
+            Some(Flash::error(
+                "veritabanı yapılandırılmamış (pdman.toml: [database] url)",
+            )),
+        );
+    };
+
+    let servers = match db.list_servers().await {
+        Ok(servers) => servers,
+        Err(err) => {
+            return render_servers_partial(
+                &state,
+                Some(Flash::error(format!("sunucular okunamadı: {err}"))),
+            );
+        }
+    };
+
+    let Some(record) = servers.iter().find(|record| record.id == id) else {
+        return render_servers_partial(&state, Some(Flash::error("sunucu bulunamadı")));
+    };
+
+    let connection = AgentConnection::from_record(record);
+    let entries = build_agent_hosts(&connection).await;
+    state.registry.upsert_server(&id, entries);
+
+    match state
+        .registry
+        .hosts()
+        .iter()
+        .find(|host| host.server_id == id)
+    {
+        Some(host) if host.available => render_servers_partial(
+            &state,
+            Some(Flash::success(format!("{} bağlantısı sağlam", host.name))),
+        ),
+        Some(host) => render_servers_partial(
+            &state,
+            Some(Flash::error(format!(
+                "{} kullanılamıyor: {}",
+                host.name,
+                host.error.as_deref().unwrap_or("bilinmeyen neden")
+            ))),
+        ),
+        None => render_servers_partial(&state, Some(Flash::error("sunucu bulunamadı"))),
+    }
+}
+
+/// Taze veriyle sunucu partial'ı çizer.
+fn render_servers_partial(state: &AppState, flash: Option<Flash>) -> Response {
+    render(ServersPartial {
+        db_ready: state.db.is_some(),
+        servers: server_cards(state),
+        local_hosts: local_cards(state),
+        flash,
+    })
+}
+
+/// Kayıt defterinden sunucu satırlarını kurar: bir sunucunun runtime
+/// kayıtları (`prod1-docker`, `prod1-podman`) tek satırda birleştirilir.
+fn server_cards(state: &AppState) -> Vec<ServerCard> {
+    let mut cards: Vec<ServerCard> = Vec::new();
+
+    for host in state.registry.hosts() {
+        if host.source == HostSource::Local {
+            continue;
+        }
+
+        let security = host.security.unwrap_or_default();
+
+        if let Some(card) = cards.iter_mut().find(|card| card.id == host.server_id) {
+            if !card.kinds.contains(host.kind.as_str()) {
+                card.kinds.push_str(", ");
+                card.kinds.push_str(host.kind.as_str());
+            }
+            card.available |= host.available;
+            if card.error.is_none() {
+                card.error = host.error.clone();
+            }
+            continue;
+        }
+
+        cards.push(ServerCard {
+            id: host.server_id.clone(),
+            name: server_display_name(&host),
+            url: host.url.clone().unwrap_or_default(),
+            source: match host.source {
+                HostSource::Config => "config",
+                _ => "database",
+            },
+            kinds: host.kind.as_str().to_owned(),
+            tls: security.tls,
+            mtls: security.mtls,
+            token: security.token,
+            available: host.available,
+            error: host.error.clone(),
+            removable: host.source == HostSource::Database,
+        });
+    }
+
+    cards
+}
+
+/// Kayıt defterinden yerel runtime satırlarını kurar.
+fn local_cards(state: &AppState) -> Vec<LocalCard> {
+    state
+        .registry
+        .hosts()
+        .iter()
+        .filter(|host| host.source == HostSource::Local)
+        .map(|host| LocalCard {
+            name: host.name.clone(),
+            available: host.available,
+        })
+        .collect()
+}
+
+/// Host adını sunucu satırı için kısaltır: "prod1 (docker)" → "prod1".
+fn server_display_name(host: &HostEntry) -> String {
+    host.name
+        .strip_suffix(" (docker)")
+        .or_else(|| host.name.strip_suffix(" (podman)"))
+        .unwrap_or(&host.name)
+        .to_owned()
+}
+
+/// Form alanını kırpıp boşsa `None` yapar.
+fn trimmed(value: &Option<String>) -> Option<String> {
+    value
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned)
+}
+
+/// Sunucu adından kısa kimlik üretir: "Prod Sunucu 1" → "prod-sunucu-1".
+///
+/// Türkçe karakterler ASCII karşılıklarına çevrilir; harf/rakam dışındaki
+/// her şey tireye dönüşür.
+fn slugify(name: &str) -> String {
+    let slug: String = name
+        .chars()
+        .flat_map(|c| match c {
+            // `İ`'nin küçük harfi birleştirme işareti getirir; elle eşle.
+            'İ' => "i".chars().collect::<Vec<_>>(),
+            c => c.to_lowercase().collect::<Vec<_>>(),
+        })
+        .map(|c| match c {
+            'ı' => 'i',
+            'ş' => 's',
+            'ğ' => 'g',
+            'ü' => 'u',
+            'ö' => 'o',
+            'ç' => 'c',
+            c if c.is_ascii_alphanumeric() => c,
+            _ => '-',
+        })
+        .collect();
+
+    slug.split('-')
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("-")
+}
+
+/// Adres geri-döngü bir sunucuya mı işaret ediyor?
+fn is_loopback_host(host: &str) -> bool {
+    let host = host.trim_matches(|c| c == '[' || c == ']');
+
+    host == "localhost" || host == "::1" || host == "127.0.0.1" || host.starts_with("127.")
+}
+
+/// Sunucu formunu doğrular; hata varsa kullanıcıya gösterilecek mesajı
+/// döner.
+///
+/// Güvenlik kuralları: ağ üzerinden erişilen sunucular `https://` ve
+/// token ister (agent tarafı da token'sız geri-döngü dışına bağlanmayı
+/// reddeder). Yerel adreslerde düz HTTP ve token'sız bağlantıya izin
+/// verilir (SSH tüneli senaryosu).
+fn validate_server_form(name: &str, url: &str, token: &str) -> Result<(), String> {
+    if name.is_empty() {
+        return Err("sunucu adı gerekli".to_owned());
+    }
+    if name.chars().count() > 64 {
+        return Err("sunucu adı en fazla 64 karakter olabilir".to_owned());
+    }
+    if slugify(name).is_empty() {
+        return Err("sunucu adı harf ya da rakam içermeli".to_owned());
+    }
+
+    let parsed = url
+        .parse::<axum::http::Uri>()
+        .map_err(|_| format!("geçersiz adres: {url}"))?;
+
+    let scheme = parsed.scheme_str().unwrap_or_default();
+    let host = parsed.host().unwrap_or_default();
+
+    if !matches!(scheme, "http" | "https") {
+        return Err("adres http:// ya da https:// ile başlamalı".to_owned());
+    }
+    if host.is_empty() {
+        return Err("adreste sunucu adı eksik (örn. https://10.0.0.5:7654)".to_owned());
+    }
+
+    if !is_loopback_host(host) {
+        if scheme != "https" {
+            return Err(
+                "ağ üzerinden erişilen sunucular için https:// gerekli — agent tarafında \
+                 [tls] yapılandırın (yerel adreslerde http:// kullanılabilir)"
+                    .to_owned(),
+            );
+        }
+        if token.is_empty() {
+            return Err(
+                "ağ üzerinden erişilen sunucular için token gerekli — agent yapılandırmasındaki \
+                 taşıyıcı token'ı girin"
+                    .to_owned(),
+            );
+        }
+    }
+
+    Ok(())
+}
+
 /// `GET /static/main.css` — derleme zamanında binary'ye gömülü stil sayfası.
 ///
 /// Tek-binary hedefi gereği statik dosyalar diskten değil binaryden servis
@@ -1174,6 +1633,40 @@ mod tests {
         assert_eq!(mem_percent(400, 400), 100);
     }
 
+    #[test]
+    fn slugifies_names() {
+        assert_eq!(slugify("prod1"), "prod1");
+        assert_eq!(slugify("Prod Sunucu 1"), "prod-sunucu-1");
+        assert_eq!(slugify("  İstanbul-Örnek 2 "), "istanbul-ornek-2");
+        assert_eq!(slugify("---"), "");
+        assert_eq!(slugify("a--b"), "a-b");
+    }
+
+    #[test]
+    fn validates_loopback_servers_loosely() {
+        // Yerel adreslerde http ve token'sız bağlantıya izin verilir.
+        assert!(validate_server_form("yerel", "http://127.0.0.1:7654", "").is_ok());
+        assert!(validate_server_form("yerel", "http://localhost:7654", "").is_ok());
+        assert!(validate_server_form("yerel", "http://[::1]:7654", "").is_ok());
+    }
+
+    #[test]
+    fn validates_remote_servers_strictly() {
+        // Ağ üzerinden erişilen sunucular https + token ister.
+        assert!(validate_server_form("prod1", "http://10.0.0.5:7654", "token").is_err());
+        assert!(validate_server_form("prod1", "https://10.0.0.5:7654", "").is_err());
+        assert!(validate_server_form("prod1", "https://10.0.0.5:7654", "token").is_ok());
+    }
+
+    #[test]
+    fn validates_form_basics() {
+        assert!(validate_server_form("", "https://10.0.0.5:7654", "t").is_err());
+        assert!(validate_server_form("ad", "ftp://10.0.0.5:7654", "t").is_err());
+        assert!(validate_server_form("ad", "https://", "t").is_err());
+        assert!(validate_server_form("!!!", "https://10.0.0.5:7654", "t").is_err());
+        let long_name = "a".repeat(65);
+        assert!(validate_server_form(&long_name, "https://10.0.0.5:7654", "t").is_err());
+    }
 
     fn container(id: &str, state: &str) -> Container {
         Container {

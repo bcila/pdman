@@ -116,6 +116,20 @@
                 </a>
             </nav>
         </div>
+
+        {#— Yönetim: hostlardan bağımsız sayfalar —#}
+        <div class="border-t border-gray-800 px-3 py-4">
+            <div class="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-gray-500">Yönetim</div>
+            <nav class="space-y-1">
+                <a href="/servers"
+                   class="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-gray-400 transition-colors hover:bg-gray-800/70 hover:text-gray-200 {% if layout.active == "servers" %}bg-gray-800 font-medium text-white{% endif %}">
+                    <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M5.25 14.25h13.5m-13.5 0a2.25 2.25 0 0 1-2.25-2.25V9a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 9v3a2.25 2.25 0 0 1-2.25 2.25Zm0 0V18a2.25 2.25 0 0 1-2.25 2.25H15M5.25 14.25V18a2.25 2.25 0 0 0 2.25 2.25H9m-3.75-9h.008v.008H5.25v-.008ZM9 20.25h.008v.008H9v-.008ZM15 20.25h.008v.008H15v-.008ZM15 6.75h.008v.008H15v-.008ZM18.75 6.75h.008v.008h-.008v-.008Z"/>
+                    </svg>
+                    Sunucular
+                </a>
+            </nav>
+        </div>
     </aside>
 
     <main class="flex min-w-0 flex-1 flex-col">

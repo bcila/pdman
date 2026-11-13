@@ -1,0 +1,195 @@
+<div id="servers" class="space-y-6">
+    {#— Eylem sonrası kısa ileti —#}
+    {% match flash %}
+    {% when Some with (flash) %}
+    <div class="flex items-start gap-3 rounded-xl border p-4 text-sm {% if flash.success %}border-green-500/30 bg-green-500/10 text-green-300{% else %}border-red-500/30 bg-red-500/10 text-red-300{% endif %}">
+        <svg class="mt-0.5 h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            {% if flash.success %}
+            <path d="m4.5 12.75 6 6 9-13.5"/>
+            {% else %}
+            <path d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"/>
+            {% endif %}
+        </svg>
+        <span>{{ flash.message }}</span>
+    </div>
+    {% when None %}
+    {% endmatch %}
+
+    {% if !db_ready %}
+    <div class="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-300">
+        <svg class="mt-0.5 h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"/>
+        </svg>
+        <span>Sunucu eklemek için PostgreSQL gerekli: <code class="rounded bg-amber-500/10 px-1.5 py-0.5">pdman.toml</code> içinde <code class="rounded bg-amber-500/10 px-1.5 py-0.5">[database] url = "postgres://..."</code> ayarlayıp paneli yeniden başlatın.</span>
+    </div>
+    {% endif %}
+
+    {#— Uzak sunucular —#}
+    <div class="overflow-hidden rounded-xl border border-gray-800 bg-gray-900/60">
+        <div class="flex items-center justify-between border-b border-gray-800 px-4 py-3">
+            <h3 class="text-sm font-semibold text-gray-300">Uzak sunucular</h3>
+            <span class="rounded-full bg-gray-800 px-2.5 py-0.5 text-xs tabular-nums text-gray-400">{{ servers.len() }}</span>
+        </div>
+        {% if servers.is_empty() %}
+        <div class="p-10 text-center text-sm text-gray-500">Kayıtlı uzak sunucu yok.</div>
+        {% else %}
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+                <thead class="text-xs uppercase tracking-wider text-gray-500">
+                <tr class="border-b border-gray-800">
+                    <th class="px-4 py-3 font-medium">Ad</th>
+                    <th class="px-4 py-3 font-medium">Adres</th>
+                    <th class="px-4 py-3 font-medium">Güvenlik</th>
+                    <th class="px-4 py-3 font-medium">Runtime'lar</th>
+                    <th class="px-4 py-3 font-medium">Durum</th>
+                    <th class="px-4 py-3 text-right font-medium">İşlemler</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for server in servers %}
+                <tr class="border-b border-gray-800/60 transition-colors last:border-0 hover:bg-gray-800/40">
+                    <td class="px-4 py-3 font-medium">
+                        {{ server.name }}
+                        {% if server.source == "config" %}
+                        <span class="ml-2 rounded-full border border-gray-700 bg-gray-800 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400">pdman.toml</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-3 font-mono text-xs text-gray-400">{{ server.url }}</td>
+                    <td class="px-4 py-3">
+                        <div class="flex flex-wrap gap-1.5">
+                            {% if server.tls %}
+                            <span class="rounded-full border border-green-500/30 bg-green-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-green-300">HTTPS</span>
+                            {% else %}
+                            <span class="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-300">HTTP</span>
+                            {% endif %}
+                            {% if server.mtls %}
+                            <span class="rounded-full border border-green-500/30 bg-green-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-green-300">mTLS</span>
+                            {% endif %}
+                            {% if server.token %}
+                            <span class="rounded-full border border-green-500/30 bg-green-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-green-300">Token</span>
+                            {% else %}
+                            <span class="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-300">Token yok</span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td class="px-4 py-3 text-gray-400">{{ server.kinds }}</td>
+                    <td class="px-4 py-3">
+                        <div class="flex items-center gap-2" title="{% match server.error %}{% when Some with (reason) %}{{ reason }}{% when None %}çevrimiçi{% endmatch %}">
+                            <span class="h-2 w-2 shrink-0 rounded-full {% if server.available %}bg-green-400{% else %}bg-red-500{% endif %}"></span>
+                            {% if server.available %}
+                            <span class="text-gray-300">çevrimiçi</span>
+                            {% else %}
+                            <span class="max-w-48 truncate text-red-300">{% match server.error %}{% when Some with (reason) %}{{ reason }}{% when None %}kullanılamıyor{% endmatch %}</span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td class="px-4 py-3 text-right">
+                        {% if server.removable %}
+                        <div class="flex justify-end gap-2">
+                            <button hx-post="/servers/{{ server.id }}/check"
+                                    hx-target="#servers" hx-swap="outerHTML" hx-disabled-elt="this"
+                                    class="rounded-lg border border-sky-500/30 bg-sky-500/10 px-2.5 py-1.5 text-xs font-medium text-sky-300 transition-colors hover:bg-sky-500/20">Sına</button>
+                            <button hx-post="/servers/{{ server.id }}/remove"
+                                    hx-target="#servers" hx-swap="outerHTML" hx-disabled-elt="this"
+                                    hx-confirm="Sunucu ve host kayıtları kalıcı olarak silinsin mi?"
+                                    class="rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1.5 text-xs font-medium text-red-300 transition-colors hover:bg-red-500/20">Sil</button>
+                        </div>
+                        {% else %}
+                        <span class="text-xs text-gray-600">pdman.toml'dan yönetilir</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+    </div>
+
+    {#— Yerel runtime'lar —#}
+    {% if !local_hosts.is_empty() %}
+    <div class="overflow-hidden rounded-xl border border-gray-800 bg-gray-900/60">
+        <div class="flex items-center justify-between border-b border-gray-800 px-4 py-3">
+            <h3 class="text-sm font-semibold text-gray-300">Yerel runtime'lar</h3>
+            <span class="rounded-full bg-gray-800 px-2.5 py-0.5 text-xs tabular-nums text-gray-400">{{ local_hosts.len() }}</span>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+                <thead class="text-xs uppercase tracking-wider text-gray-500">
+                <tr class="border-b border-gray-800">
+                    <th class="px-4 py-3 font-medium">Ad</th>
+                    <th class="px-4 py-3 font-medium">Durum</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for host in local_hosts %}
+                <tr class="border-b border-gray-800/60 transition-colors last:border-0 hover:bg-gray-800/40">
+                    <td class="px-4 py-3 font-medium">{{ host.name }}</td>
+                    <td class="px-4 py-3">
+                        <div class="flex items-center gap-2">
+                            <span class="h-2 w-2 shrink-0 rounded-full {% if host.available %}bg-green-400{% else %}bg-red-500{% endif %}"></span>
+                            <span class="{% if host.available %}text-gray-300{% else %}text-red-300{% endif %}">{% if host.available %}çevrimiçi{% else %}kullanılamıyor{% endif %}</span>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    {#— Sunucu ekleme formu —#}
+    {% if db_ready %}
+    <form hx-post="/servers/add" hx-target="#servers" hx-swap="outerHTML"
+          class="space-y-5 rounded-xl border border-gray-800 bg-gray-900/60 p-5">
+        <div>
+            <h3 class="text-sm font-semibold text-gray-300">Sunucu ekle</h3>
+            <p class="mt-1 text-xs text-gray-500">Uzak sunucularda <a href="https://github.com/brkcla/pdman" class="text-sky-400 hover:underline">pdman-agent</a> çalışıyor olmalı. Bağlantı kurulabilen sunucular kaydedilir.</p>
+        </div>
+
+        <div class="grid gap-4 md:grid-cols-2">
+            <label class="block space-y-1.5">
+                <span class="text-xs font-medium text-gray-400">Ad</span>
+                <input type="text" name="name" required maxlength="64" placeholder="prod1"
+                       class="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 placeholder-gray-600 focus:border-sky-500 focus:outline-none">
+            </label>
+            <label class="block space-y-1.5">
+                <span class="text-xs font-medium text-gray-400">Adres</span>
+                <input type="text" name="url" required placeholder="https://10.0.0.5:7654"
+                       class="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 placeholder-gray-600 focus:border-sky-500 focus:outline-none">
+            </label>
+            <label class="block space-y-1.5">
+                <span class="text-xs font-medium text-gray-400">Token</span>
+                <input type="password" name="token" autocomplete="new-password" placeholder="agent'ın taşıyıcı token'ı"
+                       class="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 placeholder-gray-600 focus:border-sky-500 focus:outline-none">
+            </label>
+            <label class="block space-y-1.5">
+                <span class="text-xs font-medium text-gray-400">CA sertifikası <span class="text-gray-600">(isteğe bağlı)</span></span>
+                <input type="text" name="ca_file" placeholder="/etc/pdman/agent-ca.pem"
+                       class="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 placeholder-gray-600 focus:border-sky-500 focus:outline-none">
+            </label>
+            <label class="block space-y-1.5">
+                <span class="text-xs font-medium text-gray-400">İstemci sertifikası <span class="text-gray-600">(mTLS, isteğe bağlı)</span></span>
+                <input type="text" name="cert_file" placeholder="/etc/pdman/panel-client.pem"
+                       class="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 placeholder-gray-600 focus:border-sky-500 focus:outline-none">
+            </label>
+            <label class="block space-y-1.5">
+                <span class="text-xs font-medium text-gray-400">İstemci anahtarı <span class="text-gray-600">(mTLS, isteğe bağlı)</span></span>
+                <input type="text" name="key_file" placeholder="/etc/pdman/panel-client.key"
+                       class="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 placeholder-gray-600 focus:border-sky-500 focus:outline-none">
+            </label>
+        </div>
+
+        <p class="rounded-lg border border-gray-800 bg-gray-950/60 px-3 py-2 text-xs text-gray-500">
+            Ağ üzerinden erişilen sunucular için <strong class="text-gray-400">https://</strong> ve <strong class="text-gray-400">token</strong> zorunludur;
+            yalnızca yerel adreslerde (127.0.0.1, localhost) düz HTTP kullanılabilir.
+        </p>
+
+        <button type="submit"
+                class="rounded-lg bg-sky-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-sky-400">
+            Sunucuyu sına ve ekle
+        </button>
+    </form>
+    {% endif %}
+</div>
