@@ -2,6 +2,7 @@
 
 mod agent;
 mod config;
+mod db;
 mod events;
 mod hosts;
 mod routes;
@@ -16,15 +17,18 @@ use clap::Parser;
 use tokio::sync::broadcast;
 
 use config::Config;
-use events::{HostEvent, spawn_forwarders};
+use db::Db;
+use events::HostEvent;
 use hosts::HostRegistry;
 
 /// Panelin paylaşılan durumu.
 pub struct AppState {
-    /// Kayıtlı hostlar (yerel docker/podman; Faz 4'te uzak agentlar).
+    /// Kayıtlı hostlar (yerel, yapılandırma ve veritabanı kaynaklı).
     pub registry: HostRegistry,
     /// Birleştirilmiş runtime olay kanalı (SSE ucuna besler).
     pub events: broadcast::Sender<HostEvent>,
+    /// PostgreSQL bağlantısı; `[database]` yapılandırılmamışsa `None`.
+    pub db: Option<Db>,
 }
 
 /// Handler'ların gördüğü durum tipi.
@@ -56,7 +60,29 @@ async fn main() {
     let cli = Cli::parse();
     let config = load_config(&cli);
 
-    let registry = HostRegistry::build(&config).await;
+    // Veritabanı: [database] verilmişse bağlan; başarısızsa uyarı verip
+    // yerel/[[hosts]] işlevselliğiyle devam et.
+    let db = match &config.database.url {
+        Some(url) => match Db::connect(url).await {
+            Ok(db) => Some(db),
+            Err(err) => {
+                eprintln!("pdman: uyarı: {err} (sunucu yönetimi devre dışı)");
+                None
+            }
+        },
+        None => None,
+    };
+
+    let db_servers = match &db {
+        Some(db) => db.list_servers().await.unwrap_or_else(|err| {
+            eprintln!("pdman: uyarı: {err}");
+            Vec::new()
+        }),
+        None => Vec::new(),
+    };
+
+    let (events_tx, _events_rx) = broadcast::channel(64);
+    let registry = HostRegistry::build(&config, &db_servers, events_tx.clone()).await;
     for host in registry.hosts() {
         match (&host.runtime, &host.error) {
             (Some(_), None) => println!("pdman: {} hazır", host.name),
@@ -68,12 +94,10 @@ async fn main() {
         }
     }
 
-    let (events_tx, _events_rx) = broadcast::channel(64);
-    spawn_forwarders(registry.hosts(), events_tx.clone());
-
     let state = Arc::new(AppState {
         registry,
         events: events_tx,
+        db,
     });
 
     let app = Router::new()

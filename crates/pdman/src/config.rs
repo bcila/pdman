@@ -9,6 +9,9 @@
 //! # docker_socket = "/var/run/docker.sock"
 //! # podman_socket = "/run/podman/podman.sock"
 //!
+//! [database]           # Faz 6: arayüzden eklenen sunucuların saklandığı
+//! url = "postgres://pdman:sifre@localhost:5432/pdman"
+//!
 //! [[hosts]]            # Faz 4: pdman-agent sunucuları
 //! name = "prod1"
 //! url = "https://10.0.0.5:7654"
@@ -28,6 +31,8 @@ pub struct Config {
     pub server: ServerConfig,
     /// Yerel (panelin çalıştığı makine) runtime ayarları.
     pub local: LocalConfig,
+    /// Veritabanı ayarları; verilmezse sunucu yönetimi kullanılamaz (Faz 6).
+    pub database: DatabaseConfig,
     /// Kayıtlı uzak agent hostları (Faz 4).
     pub hosts: Vec<AgentHost>,
 }
@@ -90,6 +95,15 @@ pub struct AgentHost {
     pub key_file: Option<String>,
 }
 
+/// PostgreSQL ayarları (arayüzden eklenen sunucular burada saklanır).
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct DatabaseConfig {
+    /// Bağlantı adresi (`postgres://kullanici:sifre@sunucu:5432/pdman`).
+    /// Verilmezse sunucu yönetim paneli devre dışı kalır.
+    pub url: Option<String>,
+}
+
 impl Config {
     /// Verilen yoldan yapılandırmayı yükler.
     pub fn load(path: &Path) -> Result<Self> {
@@ -137,6 +151,21 @@ mod tests {
         assert_eq!(config.server.bind, "127.0.0.1:3000");
         assert!(config.local.enabled);
         assert!(config.hosts.is_empty());
+        assert!(config.database.url.is_none());
+    }
+
+    #[test]
+    fn parses_database_url() {
+        let raw = r#"
+            [database]
+            url = "postgres://pdman:sifre@localhost:5432/pdman"
+        "#;
+
+        let config: Config = toml::from_str(raw).unwrap();
+        assert_eq!(
+            config.database.url.as_deref(),
+            Some("postgres://pdman:sifre@localhost:5432/pdman")
+        );
     }
 
     #[test]

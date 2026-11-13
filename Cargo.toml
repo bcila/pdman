@@ -40,6 +40,7 @@ futures-core = "0.3"
 futures-util = { version = "0.3", default-features = false, features = ["std", "async-await", "async-await-macro"] }
 toml = "1"
 clap = { version = "4", features = ["derive"] }
+sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "tls-rustls-ring", "postgres", "macros"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

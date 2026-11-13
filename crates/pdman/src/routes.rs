@@ -1,6 +1,6 @@
 //! HTTP uçları: UI sayfaları, htmx partial'ları, JSON API ve SSE.
 
-use std::convert::Infallible;
+use std::{convert::Infallible, sync::Arc};
 
 use askama::Template;
 use axum::{
@@ -217,10 +217,16 @@ pub async fn index(State(state): State<App>, Query(query): Query<HostQuery>) -> 
         Err(response) => return response,
     };
 
-    let (containers, error) = load_containers(host).await;
+    let (containers, error) = load_containers(&host).await;
 
     render(IndexTemplate {
-        layout: layout(&state, host, "/", "containers", "Container'lar"),
+        layout: layout(
+            &state,
+            Some(host.as_ref()),
+            "/",
+            "containers",
+            "Container'lar",
+        ),
         host_id: host.id.clone(),
         counts: container_counts(&containers),
         containers,
@@ -238,7 +244,7 @@ pub async fn containers_partial(
         Err(response) => return response,
     };
 
-    let (containers, error) = load_containers(host).await;
+    let (containers, error) = load_containers(&host).await;
 
     render(ContainersTemplate {
         host_id: host.id.clone(),
@@ -318,13 +324,13 @@ pub async fn container_action(
 
     let (containers, error) = match &host.runtime {
         Some(runtime) => match runtime.container_action(&id, action).await {
-            Ok(()) => load_containers(host).await,
+            Ok(()) => load_containers(&host).await,
             Err(err) => {
-                let (containers, _) = load_containers(host).await;
+                let (containers, _) = load_containers(&host).await;
                 (containers, Some(format!("eylem başarısız: {err}")))
             }
         },
-        None => (Vec::new(), Some(host_unavailable_message(host))),
+        None => (Vec::new(), Some(host_unavailable_message(&host))),
     };
 
     render(ContainersTemplate {
@@ -347,12 +353,18 @@ pub async fn container_detail(
     };
 
     let Some(runtime) = &host.runtime else {
-        return service_unavailable(host_unavailable_message(host));
+        return service_unavailable(host_unavailable_message(&host));
     };
 
     match runtime.inspect_container(&id).await {
         Ok(inspect) => render(ContainerDetailTemplate {
-            layout: layout(&state, host, "/", "containers", "Container detayı"),
+            layout: layout(
+                &state,
+                Some(host.as_ref()),
+                "/",
+                "containers",
+                "Container detayı",
+            ),
             host_id: host.id.clone(),
             id,
             inspect,
@@ -380,7 +392,7 @@ pub async fn container_stats_partial(
             mem: String::new(),
             mem_limit: String::new(),
             mem_percent: 0,
-            error: Some(host_unavailable_message(host)),
+            error: Some(host_unavailable_message(&host)),
         });
     };
 
@@ -423,7 +435,7 @@ pub async fn container_logs_sse(
     };
 
     let Some(runtime) = &host.runtime else {
-        return service_unavailable(host_unavailable_message(host));
+        return service_unavailable(host_unavailable_message(&host));
     };
 
     let opts = LogOpts {
@@ -464,10 +476,10 @@ pub async fn pods_page(State(state): State<App>, Query(query): Query<HostQuery>)
         Err(response) => return response,
     };
 
-    let (pods, error) = load_pods(host).await;
+    let (pods, error) = load_pods(&host).await;
 
     render(PodsPage {
-        layout: layout(&state, host, "/pods", "pods", "Pod'lar"),
+        layout: layout(&state, Some(host.as_ref()), "/pods", "pods", "Pod'lar"),
         host_id: host.id.clone(),
         pods,
         error,
@@ -481,7 +493,7 @@ pub async fn pods_partial(State(state): State<App>, Query(query): Query<HostQuer
         Err(response) => return response,
     };
 
-    let (pods, error) = load_pods(host).await;
+    let (pods, error) = load_pods(&host).await;
 
     render(PodsPartial {
         host_id: host.id.clone(),
@@ -508,13 +520,13 @@ pub async fn pod_action(
 
     let (pods, error) = match &host.runtime {
         Some(runtime) => match runtime.pod_action(&id, action).await {
-            Ok(()) => load_pods(host).await,
+            Ok(()) => load_pods(&host).await,
             Err(err) => {
-                let (pods, _) = load_pods(host).await;
+                let (pods, _) = load_pods(&host).await;
                 (pods, Some(format!("eylem başarısız: {err}")))
             }
         },
-        None => (Vec::new(), Some(host_unavailable_message(host))),
+        None => (Vec::new(), Some(host_unavailable_message(&host))),
     };
 
     render(PodsPartial {
@@ -531,10 +543,16 @@ pub async fn images_page(State(state): State<App>, Query(query): Query<HostQuery
         Err(response) => return response,
     };
 
-    let (images, error) = load_images(host).await;
+    let (images, error) = load_images(&host).await;
 
     render(ImagesPage {
-        layout: layout(&state, host, "/images", "images", "Image'lar"),
+        layout: layout(
+            &state,
+            Some(host.as_ref()),
+            "/images",
+            "images",
+            "Image'lar",
+        ),
         host_id: host.id.clone(),
         images,
         error,
@@ -548,7 +566,7 @@ pub async fn images_partial(State(state): State<App>, Query(query): Query<HostQu
         Err(response) => return response,
     };
 
-    let (images, error) = load_images(host).await;
+    let (images, error) = load_images(&host).await;
 
     render(ImagesPartial {
         host_id: host.id.clone(),
@@ -570,13 +588,13 @@ pub async fn image_remove(
 
     let (images, error) = match &host.runtime {
         Some(runtime) => match runtime.image_remove(&id, false).await {
-            Ok(()) => load_images(host).await,
+            Ok(()) => load_images(&host).await,
             Err(err) => {
-                let (images, _) = load_images(host).await;
+                let (images, _) = load_images(&host).await;
                 (images, Some(format!("eylem başarısız: {err}")))
             }
         },
-        None => (Vec::new(), Some(host_unavailable_message(host))),
+        None => (Vec::new(), Some(host_unavailable_message(&host))),
     };
 
     render(ImagesPartial {
@@ -593,10 +611,16 @@ pub async fn volumes_page(State(state): State<App>, Query(query): Query<HostQuer
         Err(response) => return response,
     };
 
-    let (volumes, error) = load_volumes(host).await;
+    let (volumes, error) = load_volumes(&host).await;
 
     render(VolumesPage {
-        layout: layout(&state, host, "/volumes", "volumes", "Volume'lar"),
+        layout: layout(
+            &state,
+            Some(host.as_ref()),
+            "/volumes",
+            "volumes",
+            "Volume'lar",
+        ),
         host_id: host.id.clone(),
         volumes,
         error,
@@ -610,7 +634,7 @@ pub async fn volumes_partial(State(state): State<App>, Query(query): Query<HostQ
         Err(response) => return response,
     };
 
-    let (volumes, error) = load_volumes(host).await;
+    let (volumes, error) = load_volumes(&host).await;
 
     render(VolumesPartial {
         host_id: host.id.clone(),
@@ -632,13 +656,13 @@ pub async fn volume_remove(
 
     let (volumes, error) = match &host.runtime {
         Some(runtime) => match runtime.volume_remove(&name).await {
-            Ok(()) => load_volumes(host).await,
+            Ok(()) => load_volumes(&host).await,
             Err(err) => {
-                let (volumes, _) = load_volumes(host).await;
+                let (volumes, _) = load_volumes(&host).await;
                 (volumes, Some(format!("eylem başarısız: {err}")))
             }
         },
-        None => (Vec::new(), Some(host_unavailable_message(host))),
+        None => (Vec::new(), Some(host_unavailable_message(&host))),
     };
 
     render(VolumesPartial {
@@ -655,10 +679,16 @@ pub async fn networks_page(State(state): State<App>, Query(query): Query<HostQue
         Err(response) => return response,
     };
 
-    let (networks, error) = load_networks(host).await;
+    let (networks, error) = load_networks(&host).await;
 
     render(NetworksPage {
-        layout: layout(&state, host, "/networks", "networks", "Network'ler"),
+        layout: layout(
+            &state,
+            Some(host.as_ref()),
+            "/networks",
+            "networks",
+            "Network'ler",
+        ),
         host_id: host.id.clone(),
         networks,
         error,
@@ -675,7 +705,7 @@ pub async fn networks_partial(
         Err(response) => return response,
     };
 
-    let (networks, error) = load_networks(host).await;
+    let (networks, error) = load_networks(&host).await;
 
     render(NetworksPartial {
         host_id: host.id.clone(),
@@ -697,13 +727,13 @@ pub async fn network_remove(
 
     let (networks, error) = match &host.runtime {
         Some(runtime) => match runtime.network_remove(&id).await {
-            Ok(()) => load_networks(host).await,
+            Ok(()) => load_networks(&host).await,
             Err(err) => {
-                let (networks, _) = load_networks(host).await;
+                let (networks, _) = load_networks(&host).await;
                 (networks, Some(format!("eylem başarısız: {err}")))
             }
         },
-        None => (Vec::new(), Some(host_unavailable_message(host))),
+        None => (Vec::new(), Some(host_unavailable_message(&host))),
     };
 
     render(NetworksPartial {
@@ -899,13 +929,15 @@ fn escape_html(text: &str) -> String {
 
 /// Sorgudan hostu çözer; `?host=` yoksa varsayılan hostu seçer.
 #[allow(clippy::result_large_err)]
-fn resolve_host<'a>(state: &'a AppState, query: &HostQuery) -> Result<&'a HostEntry, Response> {
+fn resolve_host(state: &AppState, query: &HostQuery) -> Result<Arc<HostEntry>, Response> {
     match &query.host {
         Some(id) => state.registry.get(id).ok_or_else(|| {
             (StatusCode::NOT_FOUND, format!("bilinmeyen host: {id}")).into_response()
         }),
         None => state.registry.default_host().ok_or_else(|| {
-            service_unavailable("hiç kayıtlı host yok (pdman.toml: [local] enabled)")
+            service_unavailable(
+                "hiç kayıtlı host yok — /servers sayfasından ya da pdman.toml'dan ekleyin",
+            )
         }),
     }
 }
@@ -914,15 +946,22 @@ fn resolve_host<'a>(state: &'a AppState, query: &HostQuery) -> Result<&'a HostEn
 ///
 /// Hostlar kenar çubuğunda runtime türüne göre tamamen ayrı gruplara
 /// (Docker / Podman) paylaştırılır; seçili hostun türüne göre de marka
-/// rengi sınıfları seçilir.
-fn layout(state: &AppState, host: &HostEntry, path: &str, active: &str, title: &str) -> Layout {
+/// rengi sınıfları seçilir. Host olmayan sayfalarda (ör. sunucu yönetimi)
+/// `None` verilir.
+fn layout(
+    state: &AppState,
+    host: Option<&HostEntry>,
+    path: &str,
+    active: &str,
+    title: &str,
+) -> Layout {
     let mut docker_hosts = Vec::new();
     let mut podman_hosts = Vec::new();
 
     for entry in state.registry.hosts() {
         let nav = HostNav {
             id: entry.id.clone(),
-            label: nav_label(entry),
+            label: nav_label(&entry),
             available: entry.available,
         };
         if entry.kind == RuntimeKind::Podman {
@@ -932,7 +971,24 @@ fn layout(state: &AppState, host: &HostEntry, path: &str, active: &str, title: &
         }
     }
 
-    let (brand_badge_class, nav_active_class) = if host.kind == RuntimeKind::Podman {
+    let (host_id, host_name, host_kind, host_available, is_podman) = match host {
+        Some(host) => (
+            host.id.clone(),
+            host.name.clone(),
+            host.kind.as_str().to_owned(),
+            host.available,
+            host.kind == RuntimeKind::Podman,
+        ),
+        None => (
+            String::new(),
+            "host seçilmedi".to_owned(),
+            "yok".to_owned(),
+            false,
+            false,
+        ),
+    };
+
+    let (brand_badge_class, nav_active_class) = if is_podman {
         (
             "border-violet-400/30 bg-violet-400/10 text-violet-300",
             "bg-violet-400/10 text-violet-300",
@@ -947,11 +1003,11 @@ fn layout(state: &AppState, host: &HostEntry, path: &str, active: &str, title: &
     Layout {
         docker_hosts,
         podman_hosts,
-        host_id: host.id.clone(),
-        host_name: host.name.clone(),
-        host_kind: host.kind.as_str().to_owned(),
-        host_available: host.available,
-        is_podman: host.kind == RuntimeKind::Podman,
+        host_id,
+        host_name,
+        host_kind,
+        host_available,
+        is_podman,
         path: path.to_owned(),
         active: active.to_owned(),
         title: title.to_owned(),
@@ -1117,6 +1173,7 @@ mod tests {
         assert_eq!(mem_percent(200, 400), 50);
         assert_eq!(mem_percent(400, 400), 100);
     }
+
 
     fn container(id: &str, state: &str) -> Container {
         Container {
