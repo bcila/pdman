@@ -57,12 +57,16 @@ fn load_config(cli: &Cli) -> Config {
 
 #[tokio::main]
 async fn main() {
+    // `.env` dosyasını yükle (varsa; ortam değişkenlerini ezmez).
+    dotenvy::dotenv().ok();
+
     let cli = Cli::parse();
     let config = load_config(&cli);
 
-    // Veritabanı: [database] verilmişse bağlan; başarısızsa uyarı verip
-    // yerel/[[hosts]] işlevselliğiyle devam et.
-    let db = match &config.database.url {
+    // Veritabanı: pdman.toml > PDMAN_DATABASE_URL > DATABASE_URL (.env dahil);
+    // bağlanılamazsa uyarı verip yerel/[[hosts]] işlevselliğiyle devam et.
+    let database_url = config.database.resolve_url();
+    let db = match database_url.as_deref() {
         Some(url) => match Db::connect(url).await {
             Ok(db) => Some(db),
             Err(err) => {

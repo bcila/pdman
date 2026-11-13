@@ -11,6 +11,8 @@
 //!
 //! [database]           # Faz 6: arayüzden eklenen sunucuların saklandığı
 //! url = "postgres://pdman:sifre@localhost:5432/pdman"
+//! # (url verilmezse PDMAN_DATABASE_URL ya da DATABASE_URL ortam
+//! #  değişkenlerinden — .env dahil — okunur)
 //!
 //! [[hosts]]            # Faz 4: pdman-agent sunucuları
 //! name = "prod1"
@@ -100,8 +102,31 @@ pub struct AgentHost {
 #[serde(default, deny_unknown_fields)]
 pub struct DatabaseConfig {
     /// Bağlantı adresi (`postgres://kullanici:sifre@sunucu:5432/pdman`).
-    /// Verilmezse sunucu yönetim paneli devre dışı kalır.
+    /// Verilmezse `PDMAN_DATABASE_URL` ya da `DATABASE_URL` ortam
+    /// değişkenlerinden (`.env` dahil) okunur; hiçbiri yoksa sunucu yönetim
+    /// paneli devre dışı kalır.
     pub url: Option<String>,
+}
+
+impl DatabaseConfig {
+    /// Bağlantı adresini çözer: `pdman.toml` > `PDMAN_DATABASE_URL` >
+    /// `DATABASE_URL` (ortam değişkeni ya da `.env`).
+    pub fn resolve_url(&self) -> Option<String> {
+        if let Some(url) = self
+            .url
+            .as_deref()
+            .map(str::trim)
+            .filter(|url| !url.is_empty())
+        {
+            return Some(url.to_owned());
+        }
+
+        std::env::var("PDMAN_DATABASE_URL")
+            .or_else(|_| std::env::var("DATABASE_URL"))
+            .ok()
+            .map(|url| url.trim().to_owned())
+            .filter(|url| !url.is_empty())
+    }
 }
 
 impl Config {
@@ -163,9 +188,19 @@ mod tests {
 
         let config: Config = toml::from_str(raw).unwrap();
         assert_eq!(
-            config.database.url.as_deref(),
+            config.database.resolve_url().as_deref(),
             Some("postgres://pdman:sifre@localhost:5432/pdman")
         );
+    }
+
+    #[test]
+    fn resolves_empty_url_to_none() {
+        // Ortam değişkeni set edilmediği sürece boş/boşluklu değer None'a
+        // çözümlenir.
+        let config = DatabaseConfig {
+            url: Some("   ".to_owned()),
+        };
+        assert!(config.resolve_url().is_none());
     }
 
     #[test]

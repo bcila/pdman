@@ -79,7 +79,13 @@ Dosta yoksa panel varsayılan ayarlarla yerel runtime'ları arar.
 
    Formda ad, adres, token ve (mTLS için) sertifika yolları girilir; sunucu
    yalnızca bağlantı denetimini geçerse kaydedilir. Kayıtlar PostgreSQL'de
-   saklanır.
+   saklanır. Bağlantı adresi `pdman.toml` yerine `.env` dosyasından da
+   okunabilir (bkz. `.env.example`):
+
+   ```sh
+   # .env — öncelik: pdman.toml [database] url > PDMAN_DATABASE_URL > DATABASE_URL
+   DATABASE_URL=postgres://pdman:sifre@localhost:5432/pdman
+   ```
 
    **Yapılandırmadan**: `[[hosts]]` girişi olarak elle ekleyin (arayüzden
    silinemez, dosyadan yönetilir):

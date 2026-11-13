@@ -364,6 +364,9 @@ sayesinde yalnız tipleri gereken taraf ağır bağımlılıkları (bollard, req
       DB kaydı, sidebar'da host), negatif formlar (uzak adres + http, token
       eksik, ulaşılamayan agent), "Sına", "Sil", panel yeniden başlatmada
       DB'den geri yükleme.
+- [x] `.env` desteği (`dotenvy`): bağlantı adresi `pdman.toml` >
+      `PDMAN_DATABASE_URL` > `DATABASE_URL` önceliğiyle çözümlenir;
+      `.env` örneği `.env.example` içinde (gerçek `.env` gitignore'dadır).
 
 ---
 

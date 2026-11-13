@@ -15,8 +15,9 @@ enabled = true
 # podman_socket = "/run/podman/podman.sock"
 
 # Veritabanı: arayüzden (/servers sayfası) eklenen uzak sunucular burada
-# saklanır. Verilmezse sunucu yönetim paneli devre dışı kalır (yalnızca
-# aşağıdaki [[hosts]] girişleri çalışır).
+# saklanır. Verilmezse PDMAN_DATABASE_URL ya da DATABASE_URL ortam
+# değişkenlerinden (.env dosyası dahil) okunur; hiçbiri yoksa sunucu yönetim
+# paneli devre dışı kalır (yalnızca aşağıdaki [[hosts]] girişleri çalışır).
 #
 # [database]
 # url = "postgres://pdman:sifre@localhost:5432/pdman"
