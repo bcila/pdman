@@ -337,11 +337,41 @@ sayesinde yalnız tipleri gereken taraf ağır bağımlılıkları (bollard, req
 - Bilinen ortam notu: bu makinenin rustup'ında `rust-objcopy` bozuk
   (libLLVM eksik); release derlemedeki strip uyarısı yereldir, CI'da yoktur.
 
+### Faz 6 — Sunucu yönetim paneli (PostgreSQL) — ✅ tamamlandı
+- [x] PostgreSQL kalıcılığı (`sqlx`, ring sağlayıcılı rustls ile): `[database]
+      url` yapılandırması; verilmezse panel DB'siz de çalışır (sunucu yönetimi
+      devre dışı kalır, yerel/`[[hosts]]` hostlar korunur). Şema açılışta
+      `CREATE TABLE IF NOT EXISTS` ile kurulur — ileride kullanıcı girişi gibi
+      özellikler aynı veritabanına eklenecek.
+- [x] `/servers` sayfası (htmx): uzak sunucuların listesi (adres, güvenlik
+      rozetleri — HTTPS/mTLS/Token —, runtime'lar, çevrimiçi durumu),
+      ekleme formu (ad, adres, token, CA/istemci sertifikası yolları),
+      "Sına" (bağlantıyı yeniden doğrula) ve "Sil" eylemleri; yerel
+      runtime'ların durumu da görünür.
+- [x] Çalışma zamanında değiştirilebilir host kayıt defteri: girişler
+      `Arc<HostEntry>` olarak `RwLock` altında; sunucu eklenince host kayıtları
+      + olay iletici görevleri girer, silinince görevler iptal edilir.
+      `HostEntry` artık kaynağını (`Local`/`Config`/`Database`) taşır —
+      yalnızca veritabanı kaynaklı sunucular arayüzden silinebilir.
+- [x] Bağlantı güvenliği kuralları (form doğrulaması): ağ üzerinden erişilen
+      sunucular için `https://` ve taşıyıcı token zorunlu; yalnızca geri-döngü
+      adreslerde düz HTTP/token'sız bağlantıya izin verilir (SSH tüneli
+      senaryosu, agent tarafındaki kuralla aynı). Eklenen sunucu ancak
+      sağlık denetimini geçerse kaydedilir.
+- [x] Token'lar `servers` tablosunda saklanır (kullanıcı tercihi); listeleme
+      yanıtlarında asla tarayıcıya geri gönderilmez.
+- [x] E2E doğrulama (test PostgreSQL + yerel agent): ekleme (slug üretimi,
+      DB kaydı, sidebar'da host), negatif formlar (uzak adres + http, token
+      eksik, ulaşılamayan agent), "Sına", "Sil", panel yeniden başlatmada
+      DB'den geri yükleme.
+
 ---
 
 ## 3. Kapsam dışı (bilinçli kararlar)
 
-- Çok kullanıcılı kimlik doğrulama / RBAC (kişisel/homelab aracı).
+- Çok kullanıcılı kimlik doğrulama / RBAC — şimdilik kişisel/homelab aracı;
+      Faz 6'daki PostgreSQL altyapısı ileride kullanıcı girişi eklemeyi
+      kolaylaştıracak.
 - Swarm / Kubernetes yönetimi.
 - Compose dosyası deploy'u (ileride düşünülebilir; önce container/pod düzeyi).
 - UI framework değişikliği (React/Vue vb.) — htmx + askama yeterli.

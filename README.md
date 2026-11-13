@@ -20,6 +20,10 @@ agent tek statik binary olarak dağıtılır.
   bağımlılığı yoktur.
 - **Güvenlik**: agent'da taşıyıcı token (zorunlu, dış bind için), opsiyonel
   TLS ve karşılıklı TLS (mTLS).
+- **Sunucu yönetimi**: `/servers` sayfasından uzak sunucu ekleme/silme ve
+  bağlantı sınama; kayıtlar PostgreSQL'de saklanır (yeniden başlatmada
+  korunur). Ağ üzerinden erişilen sunucular için `https://` + token
+  zorunludur.
 
 ## Mimari
 
@@ -63,14 +67,29 @@ Dosta yoksa panel varsayılan ayarlarla yerel runtime'ları arar.
 ### Uzak sunucu
 
 1. Agent'ı kurun (ör. `deploy/install-agent.sh`) ve token'ı ayarlayın.
-2. Panele host olarak ekleyin:
+2. Sunucuyu panele ekleyin — iki yol:
 
-```toml
-[[hosts]]
-name = "prod1"
-url = "https://10.0.0.5:7654"
-token_file = "/etc/pdman/prod1.token"
-```
+   **Arayüzden** (önerilen): `pdman.toml`'da veritabanını ayarlayın, paneli
+   açın ve **Sunucular** sayfasından ekleyin:
+
+   ```toml
+   [database]
+   url = "postgres://pdman:sifre@localhost:5432/pdman"
+   ```
+
+   Formda ad, adres, token ve (mTLS için) sertifika yolları girilir; sunucu
+   yalnızca bağlantı denetimini geçerse kaydedilir. Kayıtlar PostgreSQL'de
+   saklanır.
+
+   **Yapılandırmadan**: `[[hosts]]` girişi olarak elle ekleyin (arayüzden
+   silinemez, dosyadan yönetilir):
+
+   ```toml
+   [[hosts]]
+   name = "prod1"
+   url = "https://10.0.0.5:7654"
+   token_file = "/etc/pdman/prod1.token"
+   ```
 
 Agent yapılandırması için [`examples/pdman-agent.toml`](examples/pdman-agent.toml).
 
@@ -102,6 +121,12 @@ cd crates/pdman && npx @tailwindcss/cli -i style/main.css -o public/main.css
   da SSH tüneli ile kullanın (kişisel yönetim aracı tasarımı).
 - Agent, dış bir adrese bind edildiğinde token **zorunludur**; token yoksa
   yalnızca geri-döngü adreslerine bind edilmesine izin verilir.
+- `/servers` formu ağ üzerinden erişilen sunucularda `https://` ve token
+  olmadan ekleme yapmayı reddeder; düz HTTP yalnızca yerel adreslerde
+  (SSH tüneli) kullanılabilir.
+- Arayüzden eklenen sunucu bilgileri (token dahil) PostgreSQL'de saklanır;
+  listeleme yanıtlarında token tarayıcıya geri gönderilmez. Veritabanı
+  erişimini kısıtlayın (ör. `localhost` + güçlü parola).
 - mTLS, agent'a yalnızca bilinen istemcilerin bağlanmasını garanti eder.
 
 ## Yol haritası ve tasarım kararları

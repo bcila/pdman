@@ -14,6 +14,13 @@ enabled = true
 # docker_socket = "/var/run/docker.sock"
 # podman_socket = "/run/podman/podman.sock"
 
+# Veritabanı: arayüzden (/servers sayfası) eklenen uzak sunucular burada
+# saklanır. Verilmezse sunucu yönetim paneli devre dışı kalır (yalnızca
+# aşağıdaki [[hosts]] girişleri çalışır).
+#
+# [database]
+# url = "postgres://pdman:sifre@localhost:5432/pdman"
+
 # Uzak sunucular (pdman-agent). Her agent, sağlık yanıtındaki her kullanılabilir
 # runtime için ayrı host olarak kaydedilir (örn. "prod1-docker").
 #
